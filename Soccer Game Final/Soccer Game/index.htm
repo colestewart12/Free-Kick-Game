@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/style.css">
+    <title>Demo</title>
+</head>
+<body>
+    <p class="text">Up arrow: Christiano Ronaldo Left arrow: Lionel Messi Right arrow: Nouhou Tolo Down arrow: Jordan Ross</p>
+    <script src="/js/ammo.js"></script>
+    <script type = "module" src="/js/OrbitControls.js"></script>
+    <script type="module">
+        import * as THREE from '/js/three.module.js'
+        import {OrbitControls} from '/js/OrbitControls.js';
+
+        //Graphics variables
+        var scene, camera, renderer, clock, controls = undefined;
+
+        //Physics variables
+        var physicsUniverse = undefined;
+        var rigidBody_List = new Array();
+        var tmpTransformation = undefined;
+
+        //Raycaster Variables
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        let tmpPos = new THREE.Vector3();
+        let mouseCoords = new THREE.Vector2();
+        let coScale = 1;
+
+        //Text variable
+        const text = document.querySelector(".text");
+
+        //Tracks movements of the mouse
+        function onPointerMove( event ) {
+	        pointer.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+	        pointer.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        }
+
+        //Initializes Ammo and contains the rendering of the scene
+        Ammo().then( AmmoStart );
+        function AmmoStart()
+        {
+            tmpTransformation = new Ammo.btTransform();
+            initPhysicsUniverse();
+            initGraphicsUniverse();
+
+            // base
+            createGround(500, 1, 500 , new THREE.Vector3(10, -30, 10) , 0 );
+
+            //goal
+            createGoal(40, 18, 1, new THREE.Vector3(10,-21.1,60), 0);
+
+            //Run the scene
+            setTimeout(render, 10000);
+            
+        }
+        
+        //Creates the physics world
+        function initPhysicsUniverse(){
+            var collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
+            var dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
+            var overlappingPairCache = new Ammo.btDbvtBroadphase();
+            var solver = new Ammo.btSequentialImpulseConstraintSolver();
+            physicsUniverse = new Ammo.btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
+            physicsUniverse.setGravity(new Ammo.btVector3(0, -75, 0));
+        }
+
+        //Creates the graphics world
+        function initGraphicsUniverse(){
+            clock = new THREE.Clock();
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 1000 );
+            camera.position.set( -10, 10, -90 );
+            camera.lookAt(new THREE.Vector3(0, 6, 0));
+            
+            renderer = new THREE.WebGLRenderer({antialias : true, alpha : true});
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            var ambientLight = new THREE.AmbientLight(0xcccccc, 0.2);
+            scene.add(ambientLight);
+            var directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(-1, 0.9, 0.4);
+            scene.add(directionalLight);
+
+            scene.background = new THREE.Color(0xADD8E6);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+        }
+
+        //Field
+        function createGround(pX,pY,pZ, position, mass, rot_quaternion){
+            let quaternion = undefined;
+            if(rot_quaternion == null){
+                quaternion = {x:0, y:0, z:0, w:1};
+            }
+            else{
+                quaternion = rot_quaternion;
+            }
+
+            //Graphics
+            let newcube = new THREE.Mesh(new THREE.BoxBufferGeometry(pX, pY, pZ), new THREE.MeshPhongMaterial({color: 0x567d46 }));
+            newcube.position.set(position.x, position.y, position.z);
+            scene.add(newcube);
+
+            //Physics
+            let transform = new Ammo.btTransform();
+            transform.setIdentity();
+            transform.setOrigin( new Ammo.btVector3( position.x, position.y, position.z ) );
+            transform.setRotation( new Ammo.btQuaternion( quaternion.x, quaternion.y, quaternion.z, quaternion.w ) );
+            let defaultMotionState = new Ammo.btDefaultMotionState( transform );
+
+            let structColShape = new Ammo.btBoxShape( new Ammo.btVector3( pX, pY , pZ) );
+            structColShape.setMargin( 0.05 );
+
+            let localInertia = new Ammo.btVector3( 0, 0, 0 );
+            structColShape.calculateLocalInertia( mass, localInertia );
+
+            let RBody_Info = new Ammo.btRigidBodyConstructionInfo( mass, defaultMotionState, structColShape, localInertia );
+            let RBody = new Ammo.btRigidBody( RBody_Info );
+
+            physicsUniverse.addRigidBody( RBody );
+
+            newcube.userData.physicsBody = RBody;
+            rigidBody_List.push(newcube);
+        }
+
+        //Goal
+        function createGoal(pX,pY,pZ, position, mass, rot_quaternion){
+            let quaternion = undefined;
+            if(rot_quaternion == null){
+                quaternion = {x:0, y:0, z:0, w:1};
+            }
+            else{
+                quaternion = rot_quaternion;
+            }
+
+            //Graphics
+            let newcube = new THREE.Mesh(new THREE.BoxBufferGeometry(pX, pY, pZ), new THREE.MeshPhongMaterial({color: 0x000000 }));
+            newcube.position.set(position.x, position.y, position.z);
+            scene.add(newcube);
+
+            //Physics
+            let transform = new Ammo.btTransform();
+            transform.setIdentity();
+            transform.setOrigin( new Ammo.btVector3( position.x, position.y, position.z ) );
+            transform.setRotation( new Ammo.btQuaternion( quaternion.x, quaternion.y, quaternion.z, quaternion.w ) );
+            let defaultMotionState = new Ammo.btDefaultMotionState( transform );
+
+            let structColShape = new Ammo.btBoxShape( new Ammo.btVector3( pX , pY, pZ) );
+            structColShape.setMargin( 0.05 );
+
+            let localInertia = new Ammo.btVector3( 0, 0, 0 );
+            structColShape.calculateLocalInertia( mass, localInertia );
+
+            let RBody_Info = new Ammo.btRigidBodyConstructionInfo( mass, defaultMotionState, structColShape, localInertia );
+            let RBody = new Ammo.btRigidBody( RBody_Info );
+
+            physicsUniverse.addRigidBody( RBody );
+
+            newcube.userData.physicsBody = RBody;
+            rigidBody_List.push(newcube);
+        }
+
+        //Ball shooter
+        function updateMouseEvent(event){
+            mouseCoords.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+
+            raycaster.setFromCamera(mouseCoords, camera);
+
+	        tmpPos.copy(raycaster.ray.direction);
+	        tmpPos.add(raycaster.ray.origin);
+
+            let position = {x: tmpPos.x, y: tmpPos.y, z: tmpPos.z};
+            let quaternion = {x:0, y:0, z:0, w:1};
+	        let radius = 1;
+	        let mass = 1;
+
+	        let ball = new THREE.Mesh(
+		        new THREE.SphereBufferGeometry(radius),
+		        new THREE.MeshBasicMaterial()
+	        )
+
+	        ball.position.set(position.x, position.y, position.z);
+	        scene.add(ball);
+
+	        let transform = new Ammo.btTransform();
+            transform.setIdentity();
+            transform.setOrigin( new Ammo.btVector3( position.x, position.y, position.z ) );
+            transform.setRotation( new Ammo.btQuaternion( quaternion.x, quaternion.y, quaternion.z, quaternion.w ) );
+            let defaultMotionState = new Ammo.btDefaultMotionState( transform );
+
+            let structColShape = new Ammo.btSphereShape(radius);
+            structColShape.setMargin( 0.05 );
+
+            let localInertia = new Ammo.btVector3( 0, 0, 0 );
+            structColShape.calculateLocalInertia( mass, localInertia );
+
+            let RBody_Info = new Ammo.btRigidBodyConstructionInfo( mass, defaultMotionState, structColShape, localInertia );
+            let RBody = new Ammo.btRigidBody( RBody_Info );
+            physicsUniverse.addRigidBody( RBody );
+
+            tmpPos.copy(raycaster.ray.direction);
+	        tmpPos.multiplyScalar(100);
+
+	        RBody.setLinearVelocity(new Ammo.btVector3(tmpPos.x * coScale, tmpPos.y * coScale, tmpPos.z * coScale)); 
+
+            ball.userData.physicsBody = RBody;
+            rigidBody_List.push(ball);        
+        }
+
+        //Updating the physics timeline using the clock
+        function updatePhysicsTime(deltaTime){
+            physicsUniverse.stepSimulation(deltaTime, 10);
+
+            for(let i = 0; i < rigidBody_List.length; i++){
+                let Graphics_Obj = rigidBody_List[i];
+                let Physics_Obj = Graphics_Obj.userData.physicsBody;
+                let motionState = Physics_Obj.getMotionState();
+                if ( motionState ){
+                    motionState.getWorldTransform( tmpTransformation );
+                    let new_pos = tmpTransformation.getOrigin();
+                    let new_qua = tmpTransformation.getRotation();
+                    Graphics_Obj.position.set( new_pos.x(), new_pos.y(), new_pos.z() );
+                    Graphics_Obj.quaternion.set( new_qua.x(), new_qua.y(), new_qua.z(), new_qua.w() );
+                }
+            }
+        }
+        
+        //Sets the speed of the ball
+        function velocity(event){
+            if(event.key == "ArrowUp"){
+                coScale = 2;
+            }
+            if(event.key == "ArrowDown"){
+                coScale = 1;
+            }
+            if(event.key == "ArrowRight"){
+                coScale = 1.25;
+            }
+            if(event.key == "ArrowLeft"){
+                coScale = 1.5;
+            }
+        }
+
+        //Renders the scene
+        function render(){
+            text.innerText = "GO!";
+
+            raycaster.setFromCamera( pointer, camera );
+	        const intersects = raycaster.intersectObjects( scene.children );
+	        for ( let i = 0; i < intersects.length; i ++ ) {
+                //intersects[ i ].object.material.color.set( 0x567d46 );
+            }
+
+            window.addEventListener( 'pointermove', onPointerMove );
+            window.addEventListener('keydown', velocity);
+            window.addEventListener('mousedown', updateMouseEvent);
+
+            let deltaTime = clock.getDelta();
+            updatePhysicsTime(deltaTime);
+
+            controls.update();
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(render);
+        }
+        
+
+    </script>
+</body>
+</html>
